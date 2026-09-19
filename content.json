@@ -1,0 +1,38 @@
+{
+  "slides": [
+    {
+      "text": "Which kings and high rulers played the most significant roles in shaping the history of Middle-earth?",
+      "credit": "John Howe",
+      "intro": {
+        "header": {
+          "background": true,
+          "background_color": "#0C0B09"
+        },
+        "question": {
+          "background": true,
+          "background_color": "#0C0B09"
+        },
+        "credit": {
+          "background": true,
+          "background_color": "#0C0B09"
+        }
+      }
+    },
+    {
+      "text": "Finwë: First High King of the Ñoldor, Finwë led his people to Valinor. He was later slain by Morgoth at Formenos, reshaping the history of the Ñoldor.",
+      "credit": "Nicolas Fantoni"
+    },
+    {
+      "text": "Fëanor: Eldest son of Finwë and creator of the Silmarils. After his father's death, he led the Ñoldor back to Middle-earth to wage war against Morgoth.",
+      "credit": "Anato Finnstark"
+    },
+    {
+      "text": "Fingolfin: Half-brother of Fëanor and High King of the Ñoldor in Middle-earth. He ruled from Hithlum and died challenging Morgoth in single combat.",
+      "credit": "Ted Nasmith"
+    },
+    {
+      "text": "Turgon: Son of Fingolfin and King of Gondolin. His hidden kingdom became the last great Ñoldorin realm in Beleriand before its fall.",
+      "credit": "John Howe"
+    }
+  ]
+}
