@@ -9,11 +9,11 @@ import json
 # CONFIGURATION
 # ============================================================
 
-IMAGES_DIR = Path("images")
-OUTPUT_DIR = Path("output")
-CONTENT_FILE = Path("content.json")
+IMAGES_DIR = Path("../images")
+OUTPUT_DIR = Path("../output")
+CONTENT_FILE = Path("../json/content.json")
 
-LOGO_PATH = "logo.svg"
+LOGO_PATH = "../src/logo.svg"
 
 # Final Instagram canvas
 CANVAS_WIDTH = 1080
@@ -28,12 +28,13 @@ SUPPORTED_EXTENSIONS = {
     ".jpeg",
     ".png",
     ".webp",
+    ".avif"
 }
 
 # Fonts
-MAIN_FONT_PATH = "fonts/CormorantGaramond.ttf"
-HEADER_FONT_PATH = "fonts/Cinzel.ttf"
-CREDIT_FONT_PATH = "fonts/CormorantGaramond.ttf"
+MAIN_FONT_PATH = "../fonts/CormorantGaramond.ttf"
+HEADER_FONT_PATH = "../fonts/Cinzel.ttf"
+CREDIT_FONT_PATH = "../fonts/CormorantGaramond.ttf"
 
 # Font sizes
 MAX_FONT_SIZE = 38
@@ -118,6 +119,14 @@ INTRO_QUESTION_BOX_PADDING_BOTTOM = 30
 
 INTRO_CREDIT_BOX_PADDING_TOP = 5
 INTRO_CREDIT_BOX_PADDING_BOTTOM = 5
+
+# ============================================================
+# CONCLUSION SLIDE
+# ============================================================
+
+CONCLUSION_TITLE_FONT_SIZE = 64
+CONCLUSION_TEXT_FONT_SIZE = 32
+CONCLUSION_CTA_FONT_SIZE = 28
 
 # Normal slide credit background
 CREDIT_BACKGROUND_PADDING_X = 10
@@ -351,7 +360,12 @@ def prepare_intro_artwork(image):
         ),
     )
 
-    return canvas
+    # Return the bottom edge of the actual visible artwork as well.
+    # The artwork may be shorter than the 1080x1350 canvas, so the
+    # credit must follow the artwork rather than the canvas bottom.
+    visible_artwork_bottom = y + new_height
+
+    return canvas, visible_artwork_bottom
 
 
 def prepare_normal_artwork(
@@ -364,14 +378,16 @@ def prepare_normal_artwork(
     Processing order:
 
     1. Remove embedded black side borders from the source.
-    2. Scale the actual artwork to EXACTLY 1080px wide.
+    2. Fill the complete artwork area: 1080 × target_height.
     3. Preserve the original aspect ratio.
-    4. If the resulting image is too tall, crop vertically.
-    5. Never crop horizontally.
-    6. Never distort.
+    4. Crop only the excess edges needed to fill the area.
+    5. Never distort the artwork.
+    6. Use a centered crop so portrait and landscape artwork
+       are handled consistently.
 
-    This means the actual artwork reaches both the left
-    and right edges of the Instagram canvas.
+    This prevents large black areas when the source artwork
+    is shorter or has a different aspect ratio than the
+    available Instagram artwork area.
     """
 
     image = ImageOps.exif_transpose(
@@ -386,82 +402,26 @@ def prepare_normal_artwork(
         image
     )
 
-    source_width, source_height = image.size
-
     # ========================================================
-    # SCALE TO EXACTLY 1080PX WIDTH
+    # COVER THE COMPLETE ARTWORK AREA
     # ========================================================
 
-    scale = (
-        CANVAS_WIDTH
-        / source_width
-    )
-
-    new_width = CANVAS_WIDTH
-
-    new_height = int(
-        source_height * scale
-    )
-
-    image = image.resize(
-        (
-            new_width,
-            new_height,
-        ),
-        Image.Resampling.LANCZOS,
-    )
-
-    # ========================================================
-    # CROP VERTICALLY IF NECESSARY
-    # ========================================================
-
-    if new_height > target_height:
-
-        crop_amount = (
-            new_height - target_height
-        )
-
-        crop_top = (
-            crop_amount // 2
-        )
-
-        image = image.crop(
-            (
-                0,
-                crop_top,
-                CANVAS_WIDTH,
-                crop_top + target_height,
-            )
-        )
-
-        return image
-
-    # ========================================================
-    # IMAGE IS SHORTER THAN AVAILABLE AREA
-    # ========================================================
-
-    canvas = Image.new(
-        "RGB",
+    # ImageOps.fit preserves the aspect ratio and scales the
+    # artwork large enough to completely cover the target area.
+    # Any excess is cropped from the edges rather than replaced
+    # with black padding.
+    image = ImageOps.fit(
+        image,
         (
             CANVAS_WIDTH,
             target_height,
         ),
-        ARTWORK_BACKGROUND,
+        method=Image.Resampling.LANCZOS,
+        centering=(0.5, 0.5),
     )
 
-    y = (
-        target_height - new_height
-    ) // 2
-
-    canvas.paste(
-        image,
-        (
-            0,
-            y,
-        ),
-    )
-
-    return canvas
+    # The artwork now occupies the complete artwork section.
+    return image, target_height
 
 
 # ============================================================
@@ -886,22 +846,33 @@ def draw_centered_credit_box(
 def draw_credit(
     canvas,
     credit,
+    visible_artwork_bottom,
 ):
     """
-    Draw credit centered near the bottom of the artwork.
+    Draw credit centered at the bottom of the artwork area.
+
+    The credit is positioned at the bottom of the ACTUAL
+    visible artwork, excluding any background padding.
+
+    The credit background uses alpha_composite(), which requires
+    an RGBA/LA base image. Preserve the original canvas mode
+    before converting temporarily to RGBA.
     """
 
     if not credit:
         return canvas
+
+    original_mode = canvas.mode
+
+    # alpha_composite requires RGBA or LA.
+    canvas = canvas.convert("RGBA")
 
     font = load_font(
         CREDIT_FONT_PATH,
         CREDIT_FONT_SIZE,
     )
 
-    draw = ImageDraw.Draw(
-        canvas
-    )
+    draw = ImageDraw.Draw(canvas)
 
     bbox = draw.textbbox(
         (0, 0),
@@ -913,17 +884,18 @@ def draw_credit(
         bbox[3] - bbox[1]
     )
 
-    credit_center_x = (
-        CANVAS_WIDTH / 2
-    )
+    credit_center_x = CANVAS_WIDTH / 2
 
+    # Position the credit at the bottom of the actual
+    # visible artwork, not at the bottom of the artwork
+    # container when that container contains padding.
     credit_center_y = (
-        canvas.height
+        visible_artwork_bottom
         - INTRO_CREDIT_BOTTOM_MARGIN
         - text_height / 2
     )
 
-    return draw_centered_credit_box(
+    canvas = draw_centered_credit_box(
         canvas,
         credit,
         credit_center_x,
@@ -934,6 +906,10 @@ def draw_credit(
         CREDIT_BACKGROUND_PADDING_Y,
         CREDIT_BACKGROUND_PADDING_Y,
     )
+
+    # Return to the original mode so the rest of the pipeline
+    # continues to work with the RGB final canvas / JPEG output.
+    return canvas.convert(original_mode)
 
 
 # ============================================================
@@ -1100,6 +1076,7 @@ def process_intro(
     text,
     credit,
     intro_config,
+    visible_artwork_bottom,
 ):
     """
     Intro consists of THREE independent sections:
@@ -1312,8 +1289,11 @@ def process_intro(
             ARTWORK_WIDTH / 2
         )
 
+        # Keep the credit at the bottom of the ACTUAL visible artwork.
+        # This is important when the source artwork is shorter than
+        # 1350px and therefore has vertical padding on the canvas.
         credit_center_y = (
-            ARTWORK_HEIGHT
+            visible_artwork_bottom
             - INTRO_CREDIT_BOTTOM_MARGIN
             - (
                 credit_text_height
@@ -1421,7 +1401,7 @@ def process_normal_slide(
     # PREPARE FULL-WIDTH ARTWORK
     # ========================================================
 
-    artwork = prepare_normal_artwork(
+    artwork, visible_artwork_bottom = prepare_normal_artwork(
         source_image,
         artwork_height,
     )
@@ -1607,23 +1587,10 @@ def process_normal_slide(
     # CREDIT
     # ========================================================
 
-    artwork_with_credit = artwork.convert(
-        "RGBA"
-    )
-
-    artwork_with_credit = draw_credit(
-        artwork_with_credit,
+    final_canvas = draw_credit(
+        final_canvas,
         credit,
-    )
-
-    final_canvas.paste(
-        artwork_with_credit.convert(
-            "RGB"
-        ),
-        (
-            0,
-            0,
-        ),
+        visible_artwork_bottom,
     )
 
     # ========================================================
@@ -1654,9 +1621,616 @@ def process_normal_slide(
 
 
 # ============================================================
-# LOAD CONTENT
+# CONCLUSION SLIDE
 # ============================================================
 
+def process_conclusion_slide(
+    artwork_path,
+    output_path,
+    title,
+    description,
+    cta,
+    credit,
+    conclusion_config,
+):
+    """
+    Create the conclusion slide from the "conclusion" object in
+    content.json.
+
+    The conclusion uses the same three independently configurable
+    zones as the intro:
+
+    1. Header / branding
+    2. Core CTA content
+    3. Credit
+
+    The artwork is full-bleed, so the conclusion does not create
+    large unused black areas when the source artwork has a different
+    aspect ratio.
+    """
+
+    source_image = Image.open(
+        artwork_path
+    )
+
+    source_image = ImageOps.exif_transpose(
+        source_image
+    ).convert("RGB")
+
+    # ========================================================
+    # FULL-BLEED ARTWORK
+    # ========================================================
+
+    artwork = ImageOps.fit(
+        source_image,
+        (
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT,
+        ),
+        method=Image.Resampling.LANCZOS,
+        centering=(
+            float(
+                conclusion_config.get(
+                    "artwork_center_x",
+                    0.5,
+                )
+            ),
+            float(
+                conclusion_config.get(
+                    "artwork_center_y",
+                    0.5,
+                )
+            ),
+        ),
+    )
+
+    canvas = artwork.convert("RGBA")
+
+    draw = ImageDraw.Draw(
+        canvas
+    )
+
+    # ========================================================
+    # CONFIG
+    # ========================================================
+
+    header_config = conclusion_config.get(
+        "header",
+        {},
+    )
+
+    question_config = conclusion_config.get(
+        "question",
+        {},
+    )
+
+    credit_config = conclusion_config.get(
+        "credit",
+        {},
+    )
+
+    # ========================================================
+    # HEADER — BRAND
+    # ========================================================
+
+    header_top = int(
+        header_config.get(
+            "top",
+            INTRO_HEADER_TOP,
+        )
+    )
+
+    header_info = draw_branding_header(
+        canvas,
+        header_top,
+    )
+
+    if header_config.get(
+        "background",
+        True,
+    ):
+
+        header_color = header_config.get(
+            "background_color",
+            PANEL_COLOR,
+        )
+
+        canvas = draw_background_box(
+            canvas,
+            CANVAS_WIDTH / 2,
+            header_info["top"],
+            header_info["width"],
+            header_info["height"],
+            header_color,
+            padding_x=int(
+                header_config.get(
+                    "padding_x",
+                    INTRO_BOX_PADDING_X,
+                )
+            ),
+            padding_top=int(
+                header_config.get(
+                    "padding_top",
+                    INTRO_HEADER_BOX_PADDING_TOP,
+                )
+            ),
+            padding_bottom=int(
+                header_config.get(
+                    "padding_bottom",
+                    INTRO_HEADER_BOX_PADDING_BOTTOM,
+                )
+            ),
+        )
+
+        draw = ImageDraw.Draw(
+            canvas
+        )
+
+        draw_branding_header(
+            canvas,
+            header_top,
+        )
+
+    # ========================================================
+    # CORE — TITLE / DESCRIPTION / CTA
+    # ========================================================
+
+    title_font = load_font(
+        MAIN_FONT_PATH,
+        int(
+            question_config.get(
+                "title_font_size",
+                CONCLUSION_TITLE_FONT_SIZE,
+            )
+        ),
+    )
+
+    text_font = load_font(
+        MAIN_FONT_PATH,
+        int(
+            question_config.get(
+                "text_font_size",
+                CONCLUSION_TEXT_FONT_SIZE,
+            )
+        ),
+    )
+
+    cta_font = load_font(
+        MAIN_FONT_PATH,
+        int(
+            question_config.get(
+                "cta_font_size",
+                CONCLUSION_CTA_FONT_SIZE,
+            )
+        ),
+    )
+
+    draw = ImageDraw.Draw(
+        canvas
+    )
+
+    core_center_x = float(
+        question_config.get(
+            "center_x",
+            CANVAS_WIDTH / 2,
+        )
+    )
+
+    core_center_y = float(
+        question_config.get(
+            "center_y",
+            590,
+        )
+    )
+
+    title_bbox = draw.textbbox(
+        (0, 0),
+        title,
+        font=title_font,
+    )
+
+    title_width = (
+        title_bbox[2]
+        - title_bbox[0]
+    )
+
+    title_height = (
+        title_bbox[3]
+        - title_bbox[1]
+    )
+
+    description_bbox = draw.multiline_textbbox(
+        (0, 0),
+        description,
+        font=text_font,
+        spacing=int(
+            question_config.get(
+                "description_line_spacing",
+                8,
+            )
+        ),
+        align="center",
+    )
+
+    description_width = (
+        description_bbox[2]
+        - description_bbox[0]
+    )
+
+    description_height = (
+        description_bbox[3]
+        - description_bbox[1]
+    )
+
+    cta_bbox = draw.textbbox(
+        (0, 0),
+        cta,
+        font=cta_font,
+    )
+
+    cta_text_width = (
+        cta_bbox[2]
+        - cta_bbox[0]
+    )
+
+    cta_text_height = (
+        cta_bbox[3]
+        - cta_bbox[1]
+    )
+
+    cta_padding_x = int(
+        question_config.get(
+            "cta_padding_x",
+            35,
+        )
+    )
+
+    cta_padding_y = int(
+        question_config.get(
+            "cta_padding_y",
+            14,
+        )
+    )
+
+    cta_box_width = (
+        cta_text_width
+        + 2 * cta_padding_x
+    )
+
+    cta_box_height = (
+        cta_text_height
+        + 2 * cta_padding_y
+    )
+
+    gap_title_description = int(
+        question_config.get(
+            "gap_title_description",
+            24,
+        )
+    )
+
+    gap_description_cta = int(
+        question_config.get(
+            "gap_description_cta",
+            26,
+        )
+    )
+
+    total_content_height = (
+        title_height
+        + gap_title_description
+        + description_height
+        + gap_description_cta
+        + cta_box_height
+    )
+
+    content_top = (
+        core_center_y
+        - total_content_height / 2
+    )
+
+    # Only draw a background when explicitly enabled.
+    # This is the key difference from the previous version:
+    # the default conclusion has NO giant central dark panel.
+    if question_config.get(
+        "background",
+        False,
+    ):
+
+        content_width = max(
+            title_width,
+            description_width,
+            cta_box_width,
+        )
+
+        canvas = draw_background_box(
+            canvas,
+            core_center_x,
+            content_top,
+            content_width,
+            total_content_height,
+            question_config.get(
+                "background_color",
+                PANEL_COLOR,
+            ),
+            padding_x=int(
+                question_config.get(
+                    "padding_x",
+                    22,
+                )
+            ),
+            padding_top=int(
+                question_config.get(
+                    "padding_top",
+                    18,
+                )
+            ),
+            padding_bottom=int(
+                question_config.get(
+                    "padding_bottom",
+                    18,
+                )
+            ),
+        )
+
+        draw = ImageDraw.Draw(
+            canvas
+        )
+
+    current_y = content_top
+
+    title_draw = ImageDraw.Draw(canvas)
+    title_bbox_centered = title_draw.textbbox(
+        (0, 0),
+        title,
+        font=title_font,
+    )
+    title_x = (
+        core_center_x
+        - (title_bbox_centered[2] - title_bbox_centered[0]) / 2
+        - title_bbox_centered[0]
+    )
+    title_y = (
+        current_y
+        + title_height / 2
+        - (title_bbox_centered[3] - title_bbox_centered[1]) / 2
+        - title_bbox_centered[1]
+    )
+    title_draw.text(
+        (title_x, title_y),
+        title,
+        font=title_font,
+        fill=TEXT_COLOR,
+    )
+
+    current_y += (
+        title_height
+        + gap_title_description
+    )
+
+    description_draw = ImageDraw.Draw(canvas)
+    description_bbox_centered = description_draw.multiline_textbbox(
+        (0, 0),
+        description,
+        font=text_font,
+        spacing=int(
+            question_config.get(
+                "description_line_spacing",
+                8,
+            )
+        ),
+        align="center",
+    )
+    description_x = (
+        core_center_x
+        - (description_bbox_centered[2] - description_bbox_centered[0]) / 2
+        - description_bbox_centered[0]
+    )
+    description_y = (
+        current_y
+        + description_height / 2
+        - (description_bbox_centered[3] - description_bbox_centered[1]) / 2
+        - description_bbox_centered[1]
+    )
+    description_draw.multiline_text(
+        (description_x, description_y),
+        description,
+        font=text_font,
+        fill=TEXT_COLOR,
+        spacing=int(
+            question_config.get(
+                "description_line_spacing",
+                8,
+            )
+        ),
+        align="center",
+    )
+
+    current_y += (
+        description_height
+        + gap_description_cta
+    )
+
+    cta_draw = ImageDraw.Draw(canvas)
+
+    cta_left = (
+        core_center_x
+        - cta_box_width / 2
+    )
+    cta_top = current_y
+    cta_right = (
+        core_center_x
+        + cta_box_width / 2
+    )
+    cta_bottom = (
+        current_y
+        + cta_box_height
+    )
+
+    cta_draw.rounded_rectangle(
+        (
+            cta_left,
+            cta_top,
+            cta_right,
+            cta_bottom,
+        ),
+        radius=int(
+            question_config.get(
+                "cta_border_radius",
+                12,
+            )
+        ),
+        outline=question_config.get(
+            "cta_border_color",
+            ACCENT_COLOR,
+        ),
+        width=int(
+            question_config.get(
+                "cta_border_width",
+                2,
+            )
+        ),
+    )
+
+    cta_draw = ImageDraw.Draw(canvas)
+    cta_bbox_centered = cta_draw.textbbox(
+        (0, 0),
+        cta,
+        font=cta_font,
+    )
+    cta_x = (
+        core_center_x
+        - (cta_bbox_centered[2] - cta_bbox_centered[0]) / 2
+        - cta_bbox_centered[0]
+    )
+    cta_y = (
+        current_y
+        + cta_box_height / 2
+        - (cta_bbox_centered[3] - cta_bbox_centered[1]) / 2
+        - cta_bbox_centered[1]
+    )
+    cta_draw.text(
+        (cta_x, cta_y),
+        cta,
+        font=cta_font,
+        fill=TEXT_COLOR,
+    )
+
+    # ========================================================
+    # CREDIT — BOTTOM OF ARTWORK
+    # ========================================================
+
+    # Support the same configurable credit zone model as intro.
+    if isinstance(
+        credit_config,
+        dict,
+    ):
+
+        credit_background = credit_config.get(
+            "background",
+            True,
+        )
+
+        credit_background_color = credit_config.get(
+            "background_color",
+            "#000000",
+        )
+
+        credit_bottom_margin = int(
+            credit_config.get(
+                "bottom_margin",
+                INTRO_CREDIT_BOTTOM_MARGIN,
+            )
+        )
+
+        credit_padding_x = int(
+            credit_config.get(
+                "padding_x",
+                CREDIT_BACKGROUND_PADDING_X,
+            )
+        )
+
+        credit_padding_y = int(
+            credit_config.get(
+                "padding_y",
+                CREDIT_BACKGROUND_PADDING_Y,
+            )
+        )
+
+        if credit:
+
+            credit_font = load_font(
+                CREDIT_FONT_PATH,
+                CREDIT_FONT_SIZE,
+            )
+
+            credit_bbox = draw.textbbox(
+                (0, 0),
+                credit,
+                font=credit_font,
+            )
+
+            credit_height = (
+                credit_bbox[3]
+                - credit_bbox[1]
+            )
+
+            credit_center_x = float(
+                credit_config.get(
+                    "center_x",
+                    CANVAS_WIDTH / 2,
+                )
+            )
+
+            credit_center_y = (
+                CANVAS_HEIGHT
+                - credit_bottom_margin
+                - credit_height / 2
+            )
+
+            if credit_background:
+
+                canvas = draw_centered_credit_box(
+                    canvas,
+                    credit,
+                    credit_center_x,
+                    credit_center_y,
+                    True,
+                    credit_background_color,
+                    credit_padding_x,
+                    credit_padding_y,
+                    credit_padding_y,
+                )
+
+            else:
+
+                draw = ImageDraw.Draw(
+                    canvas
+                )
+
+                draw.text(
+                    (
+                        credit_center_x
+                        - (
+                            credit_bbox[2]
+                            - credit_bbox[0]
+                        ) / 2,
+                        credit_center_y
+                        - credit_height / 2,
+                    ),
+                    credit,
+                    font=credit_font,
+                    fill=CREDIT_COLOR,
+                )
+
+    canvas = canvas.convert("RGB")
+
+    canvas.save(
+        output_path,
+        "JPEG",
+        quality=95,
+        optimize=True,
+    )
 def load_content():
 
     if not CONTENT_FILE.exists():
@@ -1689,7 +2263,7 @@ def load_content():
             '"slides" must be an array.'
         )
 
-    return content["slides"]
+    return content
 
 
 # ============================================================
@@ -1747,7 +2321,8 @@ if __name__ == "__main__":
         exist_ok=True,
     )
 
-    slides = load_content()
+    content = load_content()
+    slides = content["slides"]
     image_paths = get_images()
 
     if not image_paths:
@@ -1810,20 +2385,6 @@ if __name__ == "__main__":
             f"{image_path.name}"
         )
 
-        with Image.open(
-            image_path
-        ) as image:
-
-            if index == 0:
-
-                artwork = prepare_intro_artwork(
-                    image
-                )
-
-            else:
-
-                artwork = image.copy()
-
         output_path = (
             OUTPUT_DIR
             / f"{image_path.stem}.jpg"
@@ -1835,19 +2396,19 @@ if __name__ == "__main__":
 
         if index == 0:
 
+            with Image.open(image_path) as image:
+                artwork, visible_artwork_bottom = prepare_intro_artwork(
+                    image
+                )
+
             intro_config = slide.get(
                 "intro",
                 {},
             )
 
-            if not isinstance(
-                intro_config,
-                dict,
-            ):
-
+            if not isinstance(intro_config, dict):
                 raise ValueError(
-                    f'Slide {index} "intro" '
-                    f"must be an object."
+                    f'Slide {index} "intro" must be an object.'
                 )
 
             process_intro(
@@ -1856,6 +2417,53 @@ if __name__ == "__main__":
                 text,
                 credit,
                 intro_config,
+                visible_artwork_bottom,
+            )
+
+        # ====================================================
+        # CONCLUSION
+        # ====================================================
+
+        elif "conclusion" in slide:
+
+            conclusion_config = slide.get(
+                "conclusion",
+                {},
+            )
+
+            if not isinstance(conclusion_config, dict):
+                raise ValueError(
+                    f'Slide {index} "conclusion" must be an object.'
+                )
+
+            description = slide.get(
+                "description",
+                "",
+            ).strip()
+
+            cta = slide.get(
+                "cta",
+                "",
+            ).strip()
+
+            if not description:
+                raise ValueError(
+                    f"Conclusion slide {index} has no description."
+                )
+
+            if not cta:
+                raise ValueError(
+                    f"Conclusion slide {index} has no CTA."
+                )
+
+            process_conclusion_slide(
+                image_path,
+                output_path,
+                text,
+                description,
+                cta,
+                credit,
+                conclusion_config,
             )
 
         # ====================================================
@@ -1863,6 +2471,9 @@ if __name__ == "__main__":
         # ====================================================
 
         else:
+
+            with Image.open(image_path) as image:
+                artwork = image.copy()
 
             process_normal_slide(
                 artwork,
@@ -1874,6 +2485,9 @@ if __name__ == "__main__":
         print(
             f"Saved: {output_path}"
         )
+
+    # The conclusion is now a normal entry in content.json,
+    # so there is no separate auto-generated conclusion pass.
 
     print()
     print("Done.")

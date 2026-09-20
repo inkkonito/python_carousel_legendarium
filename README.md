@@ -1,340 +1,637 @@
-# Tolkien Instagram Image Composer
+# Legendarium Carousel — Workflow Instructions
 
-A lightweight Python tool for creating polished 1080 × 1350 Instagram carousel slides from Tolkien artwork and structured text content.
+## Overview
 
-The project is used to create visual content for **The Legendarium Companion**, a Tolkien lore search and exploration project.
+This project uses a simple pipeline to create Instagram carousels for **The Legendarium Companion**.
 
-## Features
-
-- Instagram-ready 1080 × 1350 output
-- Intro slide with logo, branding, question and artwork credit
-- Content slides with artwork, branding, lore text and credits
-- Automatic artwork resizing
-- Automatic detection and removal of embedded dark side borders
-- Vertical artwork cropping when required
-- Custom typography
-- Custom SVG logo
-- Configurable colors and layout
-- JSON-based slide content
-- Separation between source material and published content
-
-## Project Structure
+The complete workflow is:
 
 ```text
-image-text-tool/
-│
-├── src/
-│   └── 260919/
-│       ├── artwork-01.jpg
-│       ├── artwork-02.jpg
-│       └── ...
-│
-├── published/
-│   └── 260919/
-│       ├── slide_01.jpg
-│       ├── slide_02.jpg
-│       ├── slide_03.jpg
-│       └── content.json
-│
-├── fonts/
-│   ├── Cinzel.ttf
-│   └── CormorantGaramond.ttf
-│
-├── logo.svg
-├── add_text.py
-└── README.md
+raw.txt
+   ↓
+python3 run.py
+   ↓
+content_.json + image_prompt.txt
+   ↓
+ChatGPT / Work — image research
+   ↓
+images/ + content.json
+   ↓
+python3 add_text.py
+   ↓
+output/
+   ↓
+review
+   ↓
+python3 archive_iteration.py
+   ↓
+published/ + src_archive/
 ```
 
-## Source and Published Content
+---
 
-The project separates original source material from generated and published content.
+## 1. Start a New Iteration
 
-### `src/`
-
-Contains the original artwork used to create the carousel.
-
-Each publication is organized by date:
+Put the source material for the new carousel into:
 
 ```text
-src/
-└── 260919/
-    ├── artwork-01.jpg
-    ├── artwork-02.jpg
-    └── ...
+raw.txt
 ```
 
-### `published/`
-
-Contains the final generated Instagram assets and the content used for that publication.
+The working directory should contain:
 
 ```text
-published/
-└── 260919/
-    ├── slide_01.jpg
-    ├── slide_02.jpg
-    ├── slide_03.jpg
-    └── content.json
+raw.txt
+content.json
+images/
+output/
 ```
 
-This makes it possible to keep multiple publications organized while preserving the original source artwork separately from the final published assets.
+`images/` and `output/` should be empty when starting a new iteration.
 
-The date format used is:
-
-```text
-YYMMDD
-```
-
-For example:
-
-```text
-260919
-```
-
-represents September 19, 2026.
-
-## Requirements
-
-- Python 3
-- Pillow
-- `rsvg-convert`
-- Cinzel font
-- Cormorant Garamond font
-
-### Install Pillow
+Then run:
 
 ```bash
-python3 -m pip install Pillow
+python3 run.py
 ```
 
-### Install SVG rendering support
+---
 
-The project uses `rsvg-convert` to render the SVG logo.
+## 2. Generate the Content
 
-On macOS:
-
-```bash
-brew install librsvg
-```
-
-Verify the installation:
-
-```bash
-which rsvg-convert
-```
-
-## Fonts
-
-Place the following fonts in the `fonts/` directory:
+`run.py` first executes:
 
 ```text
-fonts/
-├── Cinzel.ttf
-└── CormorantGaramond.ttf
+generate_content_.py
 ```
 
-The project uses:
+This generates:
 
-- **Cinzel** for branding and headers
-- **Cormorant Garamond** for lore text
+```text
+content_.json
+```
 
-## Content
+`content_.json` contains the generated carousel content.
 
-Slide content is defined in a `content.json` file associated with each publication.
+### Important
+
+Do **not** modify `content_.json` during the image-research step.
+
+It is the generated content source for the iteration.
+
+---
+
+## 3. Generate the Image Research Prompt
+
+`run.py` then executes:
+
+```text
+generate_image_research_prompt.py
+```
+
+This generates:
+
+```text
+image_prompt.txt
+```
+
+Copy the contents of `image_prompt.txt` and use it in ChatGPT/Work.
+
+---
+
+## 4. Image Research
+
+The image-research step is performed manually using ChatGPT/Work.
+
+Search **every carousel slide**, including the introduction and conclusion when an image is required.
+
+### For every slide
+
+Find exactly **one real, existing Tolkien artwork** that is relevant to the slide.
+
+Do **not** use AI-generated artwork.
+
+The selected artwork should:
+
+- already exist online
+- be relevant to the slide
+- have a verifiable artist/author
+- have a source where the attribution can be checked
+
+### For each selected image
+
+1. Search for the artwork.
+2. Verify that it matches the slide.
+3. Verify the artist/author attribution.
+4. Display the selected artwork.
+5. Download the image.
+6. Save it in `images/`.
+7. Number it according to slide order.
 
 Example:
 
-```json
-{
-  "slides": [
-    {
-      "text": "Which kings and high rulers played the most significant roles in shaping the history of Middle-earth?",
-      "credit": "John Howe",
-      "intro": {
-        "header": {
-          "background": true,
-          "background_color": "#0C0B09"
-        },
-        "question": {
-          "background": true,
-          "background_color": "#0C0B09"
-        },
-        "credit": {
-          "background": true,
-          "background_color": "#0C0B09"
-        }
-      }
-    },
-    {
-      "text": "Finwë: First High King of the Ñoldor, Finwë led his people to Valinor. He was later slain by Morgoth at Formenos, reshaping the history of the Ñoldor.",
-      "credit": "Nicolas Fantoni"
-    }
-  ]
-}
+```text
+images/
+├── 0.jpg
+├── 1.jpg
+├── 2.jpg
+├── 3.jpg
+├── 4.jpg
+└── 5.jpg
 ```
 
-The first slide is automatically treated as the intro slide.
-
-All following slides are treated as content slides.
-
-## Intro Slide
-
-The intro slide contains three independently configurable elements:
-
-1. Header
-2. Question
-3. Artwork credit
-
-Each element can have its own background.
-
-Example:
-
-```json
-"intro": {
-  "header": {
-    "background": true,
-    "background_color": "#0C0B09"
-  },
-  "question": {
-    "background": true,
-    "background_color": "#0C0B09"
-  },
-  "credit": {
-    "background": true,
-    "background_color": "#0C0B09"
-  }
-}
-```
-
-Backgrounds can also be disabled:
-
-```json
-"header": {
-  "background": false
-}
-```
-
-The background boxes automatically adapt to the content width and are centered on the slide.
-
-## Artwork Handling
-
-For normal content slides, the script automatically:
-
-1. Loads the artwork
-2. Applies EXIF orientation
-3. Converts the image to RGB
-4. Detects embedded dark borders
-5. Removes dark side borders
-6. Scales the artwork to 1080 px wide
-7. Vertically crops the artwork when necessary
-8. Places the artwork above the text panel
-
-The artwork is never horizontally distorted.
-
-This allows artwork with different source dimensions to be consistently formatted for Instagram.
-
-## Design
-
-The visual design uses a simple palette:
+The numbering must match the slide order exactly.
 
 ```text
-Background: #0C0B09
-Text:       #F2E8D0
-Gold:       #C9A86A
+0.jpg → Slide 1
+1.jpg → Slide 2
+2.jpg → Slide 3
+...
 ```
 
-The main branding is:
+---
+
+## 5. Create `content.json`
+
+The image-research step must create:
 
 ```text
-The Legendarium Companion
+content.json
 ```
 
-The logo is loaded from:
+It should be based on:
 
 ```text
-logo.svg
+content_.json
 ```
 
-## Running the Script
+`content_.json` must remain unchanged.
 
-From the project directory:
+For every slide, update the:
+
+```json
+"credit": "..."
+```
+
+field with the **verified artist/author of the exact downloaded artwork**.
+
+### Attribution rules
+
+Never guess an artist or author.
+
+The credit must correspond to the exact image being used.
+
+If the attribution cannot be verified, continue researching or select another artwork.
+
+---
+
+## 6. Check the Working Files
+
+Before running `add_text.py`, verify that:
+
+```text
+images/
+├── 0.jpg
+├── 1.jpg
+├── 2.jpg
+├── ...
+└── [one image per slide]
+
+content.json
+content_.json
+```
+
+Check that:
+
+- there is exactly one image per slide
+- numbering follows slide order
+- the images are real existing artworks
+- the artworks are relevant to their slides
+- every artist/author attribution is verified
+- every credit matches its corresponding image
+- `content_.json` has not been modified
+
+---
+
+## 7. Generate the Carousel
+
+Run:
 
 ```bash
 python3 add_text.py
 ```
 
-The script processes the configured source artwork and content and generates the finished slides.
+This processes the downloaded images and generates the final carousel assets in:
 
-Generated files are placed in the relevant `published/YYMMDD/` directory.
+```text
+output/
+```
 
-## Output
+### Review the carousel
 
-Published carousel assets are organized by publication date:
+Before archiving, inspect the generated carousel and check:
+
+- text positioning
+- image quality
+- slide order
+- credits
+- spelling
+- formatting
+- introduction
+- conclusion
+- overall visual consistency
+
+Do not archive the iteration until the carousel has been reviewed.
+
+---
+
+## 8. Archive the Completed Iteration
+
+Once the carousel is approved, run:
+
+```bash
+python3 archive_iteration.py
+```
+
+The archive script separates the published assets from the source/generated assets.
+
+### Published archive
+
+Everything inside:
+
+```text
+images/
+```
+
+is moved to:
+
+```text
+published/YYMMDD/
+```
+
+`content.json` is copied into the same folder.
+
+Example:
 
 ```text
 published/
-└── 260919/
-    ├── slide_01.jpg
-    ├── slide_02.jpg
-    ├── slide_03.jpg
+└── 260920/
+    ├── 0.jpg
+    ├── 1.jpg
+    ├── 2.jpg
+    ├── 3.jpg
+    ├── 4.jpg
+    ├── 5.jpg
     └── content.json
 ```
 
-Every generated slide is:
+### Source archive
+
+Everything inside:
 
 ```text
-1080 × 1350 px
+output/
 ```
 
-The output is optimized for Instagram's 4:5 portrait format.
-
-## Workflow
+is moved to:
 
 ```text
-Original artwork
-      ↓
-src/YYMMDD/
-      ↓
-Content + composition
-      ↓
-add_text.py
-      ↓
-published/YYMMDD/
-      ↓
-Instagram carousel
+src_archive/YYMMDD/
 ```
 
-Each publication therefore keeps its own:
+`raw.txt` is copied into the same folder.
 
-- Original source artwork
-- Generated slides
-- Content definition
+Example:
 
-## Design Principles
+```text
+src_archive/
+└── 260920/
+    ├── slide_0.png
+    ├── slide_1.png
+    ├── slide_2.png
+    ├── ...
+    └── raw.txt
+```
 
-The compositor is designed around a few principles:
+---
 
-- Artwork remains the visual focus
-- Text remains readable without dominating the slide
-- Consistent typography across the carousel
-- Consistent branding
-- Minimal visual decoration
-- Automatic handling of different artwork dimensions
-- Instagram-ready output
-- Reusable content structure
-- Clear separation between source and published assets
+## 9. Duplicate Archive Dates
 
-## Credits
+The archive script never overwrites an existing dated archive.
 
-Artwork credits are provided through the relevant `content.json` file.
+If:
 
-The tool does not generate the underlying artwork. It is intended to compose existing artwork with text, credits and branding.
+```text
+published/260920/
+```
 
-Make sure you have the appropriate rights or permissions to use any artwork included in the project.
+or:
 
-## License
+```text
+src_archive/260920/
+```
 
-The code in this repository can be licensed separately from the artwork, fonts and branding assets.
+already exists, the script finds the next available suffix.
 
-Artwork, logos and other third-party assets may have their own copyright and licensing terms.
+For example:
 
-Check the relevant license or usage terms before redistributing them.
+```text
+260920/
+260920_1/
+260920_2/
+260920_3/
+```
+
+The **same suffix is used for both archives** so that they remain paired:
+
+```text
+published/260920_2/
+src_archive/260920_2/
+```
+
+---
+
+## 10. Reset the Working Files
+
+After archiving:
+
+### Images
+
+```text
+images/
+```
+
+is empty.
+
+### Output
+
+```text
+output/
+```
+
+is empty.
+
+### `raw.txt`
+
+The current `raw.txt` has been copied to:
+
+```text
+src_archive/YYMMDD[_N]/raw.txt
+```
+
+Then the root file is reset to an empty:
+
+```text
+raw.txt
+```
+
+### `content.json`
+
+The current `content.json` has been copied to:
+
+```text
+published/YYMMDD[_N]/content.json
+```
+
+Then the root file is reset to an empty:
+
+```text
+content.json
+```
+
+The project is therefore ready for the next iteration.
+
+---
+
+# Complete Command Sequence
+
+## Start a new carousel
+
+```bash
+python3 run.py
+```
+
+## Research images
+
+Use:
+
+```text
+image_prompt.txt
+```
+
+in ChatGPT/Work.
+
+The image-research step creates:
+
+```text
+images/
+content.json
+```
+
+## Generate the carousel
+
+```bash
+python3 add_text.py
+```
+
+## Review the generated carousel
+
+Check:
+
+```text
+output/
+```
+
+## Archive the completed iteration
+
+```bash
+python3 archive_iteration.py
+```
+
+## Start the next iteration
+
+Put new source material into:
+
+```text
+raw.txt
+```
+
+Then run:
+
+```bash
+python3 run.py
+```
+
+---
+
+# Project Structure
+
+A typical project looks like:
+
+```text
+legendarium-carousel/
+│
+├── run.py
+├── generate_content_.py
+├── generate_image_research_prompt.py
+├── add_text.py
+├── archive_iteration.py
+│
+├── raw.txt
+├── content.json
+├── content_.json
+├── image_prompt.txt
+│
+├── images/
+├── output/
+│
+├── published/
+└── src_archive/
+```
+
+After several iterations:
+
+```text
+published/
+├── 260920/
+├── 260920_1/
+└── 260921/
+
+src_archive/
+├── 260920/
+├── 260920_1/
+└── 260921/
+```
+
+---
+
+# Important Rules
+
+## Artwork
+
+Use real existing Tolkien artwork.
+
+Do **not** use AI-generated images.
+
+## Attribution
+
+Never guess an artist/author.
+
+Verify the attribution for the exact artwork used.
+
+## Slide Order
+
+Image numbering must always correspond to slide order:
+
+```text
+0.jpg → Slide 1
+1.jpg → Slide 2
+2.jpg → Slide 3
+...
+```
+
+## Content Source
+
+Keep:
+
+```text
+content_.json
+```
+
+unchanged during image research.
+
+## Review Before Archive
+
+Always review:
+
+```text
+output/
+```
+
+before running:
+
+```bash
+python3 archive_iteration.py
+```
+
+## Archive Safety
+
+Existing archives are never overwritten.
+
+The archive script automatically creates:
+
+```text
+YYMMDD
+YYMMDD_1
+YYMMDD_2
+...
+```
+
+when necessary.
+
+The published and source archives use the same date/suffix.
+
+---
+
+# Workflow at a Glance
+
+```text
+                    raw.txt
+                       │
+                       ▼
+                 python3 run.py
+                       │
+             ┌─────────┴─────────┐
+             ▼                   ▼
+       content_.json       image_prompt.txt
+             │                   │
+             │             ChatGPT / Work
+             │                   │
+             │          ┌────────┴────────┐
+             │          ▼                 ▼
+             │       images/         content.json
+             │          │                 │
+             └──────────┴─────────────────┘
+                       │
+                       ▼
+              python3 add_text.py
+                       │
+                       ▼
+                    output/
+                       │
+                       ▼
+                    REVIEW
+                       │
+                       ▼
+          python3 archive_iteration.py
+                       │
+             ┌─────────┴─────────┐
+             ▼                   ▼
+        published/          src_archive/
+        YYMMDD[_N]/         YYMMDD[_N]/
+             │                   │
+        images +             output +
+        content.json         raw.txt
+```
+
+---
+
+# End State
+
+After a successful archive, the working environment is clean:
+
+```text
+images/        → empty
+output/        → empty
+raw.txt        → empty
+content.json   → empty
+```
+
+The completed iteration is safely preserved in:
+
+```text
+published/YYMMDD[_N]/
+src_archive/YYMMDD[_N]/
+```
+
+The project is ready to start the next carousel.
